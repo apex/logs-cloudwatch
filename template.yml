@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters: 
+  Endpoint: 
+    Type: String
+    Description: The Apex Logs CloudWatch Logs integration URL.
+    AllowedPattern: ".+"
+  AuthToken:
+    Type: String
+    Description: The Apex Logs API token with write access.
+    AllowedPattern: ".+"
+  ProjectID:
+    Type: String
+    Description: The Apex Logs destination project ID.
+    AllowedPattern: ".+"
+  BufferInterval:
+    Type: Number
+    Description: The buffer flush interval in seconds.
+    Default: 60
+  BufferSize:
+    Type: Number
+    Description: The buffer max size in megabytes.
+    Default: 1
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 7
+            Status: Enabled
+
+  LogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: !Sub "logs.${AWS::Region}.amazonaws.com"
+            Action: 'sts:AssumeRole'
+
+  LogsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: logs_policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Action:
+              - 'firehose:*'
+            Resource:
+              - !Sub "arn:aws:firehose:${AWS::Region}:${AWS::AccountId}:*"
+      Roles:
+        - !Ref LogsRole
+
+  DeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  DeliveryPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: firehose_delivery_policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}*'
+      Roles:
+        - !Ref DeliveryRole
+
+  DeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamType: DirectPut
+      HttpEndpointDestinationConfiguration:
+        EndpointConfiguration:
+          Name: "ApexLogs"
+          AccessKey: !Ref AuthToken
+          Url: !Ref Endpoint
+        S3Configuration:
+          BucketARN: !GetAtt S3Bucket.Arn
+          RoleARN: !GetAtt DeliveryRole.Arn
+        RetryOptions:
+          DurationInSeconds: 300
+        RequestConfiguration:
+          ContentEncoding: NONE
+          CommonAttributes:
+            - AttributeName: project_id
+              AttributeValue: !Ref ProjectID
+            - AttributeName: aws_region
+              AttributeValue: !Ref AWS::Region
+        BufferingHints:
+          IntervalInSeconds: !Ref BufferInterval
+          SizeInMBs: !Ref BufferSize
+        RoleARN: !GetAtt DeliveryRole.Arn
+    
+{{range $index, $group := .Groups}}
+  LogsSubscription{{$index}}:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      LogGroupName: {{printf "%q" $group}}
+      FilterPattern: ""
+      DestinationArn: !GetAtt DeliveryStream.Arn
+      RoleArn: !GetAtt LogsRole.Arn
+    DependsOn: DeliveryStream
+{{end}}
