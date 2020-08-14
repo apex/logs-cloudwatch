@@ -78,7 +78,7 @@ func main() {
 
 	// fetch log groups
 	fmt.Printf("==> Finding log groups\n")
-	groups, err := getLogGroups(c.Include, c.Exclude)
+	groups, err := getLogGroups(c)
 	if err != nil {
 		log.Fatalf("error fetching log groups: %s", err)
 	}
@@ -152,8 +152,9 @@ func createStack(tmplPath string, c Config) error {
 }
 
 // getLogGroups returns all log groups.
-func getLogGroups(include, exclude []string) ([]string, error) {
-	logs := cloudwatchlogs.New(session.New(aws.NewConfig()))
+func getLogGroups(c Config) ([]string, error) {
+	conf := aws.NewConfig().WithRegion(c.Region)
+	logs := cloudwatchlogs.New(session.New(conf))
 
 	var groups []string
 	var cursor *string
@@ -171,7 +172,7 @@ func getLogGroups(include, exclude []string) ([]string, error) {
 
 		for _, group := range res.LogGroups {
 			name := *group.LogGroupName
-			if filter(name, include, exclude) {
+			if filter(name, c.Include, c.Exclude) {
 				groups = append(groups, name)
 			}
 		}
