@@ -20,6 +20,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 )
 
+// version string.
+var version string
+
 // Config struct.
 type Config struct {
 	StackName string
@@ -44,6 +47,7 @@ func main() {
 	}
 
 	// flags
+	flag.SetVersion(version)
 	flag.String(&c.ProjectID, "", "project-id", "Apex Logs destination project ID")
 	flag.String(&c.AuthToken, "", "auth-token", "Apex Logs authentication token")
 	flag.String(&c.Endpoint, "", "endpoint", "Apex Logs integration endpoint URL")

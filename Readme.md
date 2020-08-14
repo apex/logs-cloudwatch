@@ -6,6 +6,7 @@ The `logs-cloudwatch` command-line tool provides an easy way to send AWS CloudWa
 ## Installation
 
 ```
+$ curl -sf https://gobinaries.com/apex/logs-cloudwatch | sh
 ```
 
 ## Usage
